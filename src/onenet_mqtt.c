@@ -27,14 +27,17 @@
 #include <cJSON_util.h>
 
 #include <paho_mqtt.h>
-
+#include "rtconfig.h"
 #include <onenet.h>
-
+#include "easyflash.h"
+#include "string.h"
+#include "main.h"
 #define DBG_ENABLE
 #define DBG_COLOR
 #define DBG_SECTION_NAME    "onenet.mqtt"
+
 #if ONENET_DEBUG
-#define DBG_LEVEL           DBG_LOG
+#define DBG_LEVEL           LOG_LVL_WARNING
 #else
 #define DBG_LEVEL           DBG_INFO
 #endif /* ONENET_DEBUG */
@@ -55,48 +58,70 @@
 #endif
 #endif
 
+#include "remote_ctrl.h"
+
 #define  ONENET_TOPIC_DP    "$dp"
 
 static rt_bool_t init_ok = RT_FALSE;
 static MQTTClient mq_client;
 struct rt_onenet_info onenet_info;
 
+extern int http_ota_fw_download(const char* uri);
+
 struct onenet_device
 {
     struct rt_onenet_info *onenet_info;
 
-    void(*cmd_rsp_cb)(uint8_t *recv_data, size_t recv_size, uint8_t **resp_data, size_t *resp_size);
+    void(*cmd_rsp_cb)(rt_uint8_t *recv_data, size_t recv_size, rt_uint8_t **resp_data, size_t *resp_size);
 
 } onenet_mqtt;
 
 static void mqtt_callback(MQTTClient *c, MessageData *msg_data)
 {
-    size_t res_len = 0;
-    uint8_t *response_buf = RT_NULL;
-    char topicname[45] = { "$crsp/" };
-
+    char response_buf[ONENET_MSG_LEN] = {0};
+    char *ota_url = NULL;
     RT_ASSERT(c);
     RT_ASSERT(msg_data);
 
-    LOG_D("topic %.*s receive a message", msg_data->topicName->lenstring.len, msg_data->topicName->lenstring.data);
+    rt_kprintf("topic %.*s receive a message\n", msg_data->topicName->lenstring.len, msg_data->topicName->lenstring.data);
 
-    LOG_D("message length is %d", msg_data->message->payloadlen);
+    rt_kprintf("message length is : %d\n", msg_data->message->payloadlen);
 
-    if (onenet_mqtt.cmd_rsp_cb != RT_NULL)
+    if(msg_data->message->payloadlen < ONENET_MSG_LEN)
     {
-        onenet_mqtt.cmd_rsp_cb((uint8_t *) msg_data->message->payload, msg_data->message->payloadlen, &response_buf,
-                &res_len);
+        rt_memcpy(response_buf,msg_data->message->payload,msg_data->message->payloadlen);
 
-        if (response_buf != RT_NULL || res_len != 0)
+        rt_kprintf("message payload is : %s\n",response_buf);
+
+        if (rt_strncmp(response_buf,"ota_app:",8) == 0 )
         {
-            strncat(topicname, &(msg_data->topicName->lenstring.data[6]), msg_data->topicName->lenstring.len - 6);
-
-            onenet_mqtt_publish(topicname, response_buf, strlen((const char *)response_buf));
-
-            ONENET_FREE(response_buf);
-
+            ota_url = &response_buf[8];
+            http_ota_fw_download(ota_url);
         }
 
+        else if (rt_strncmp(response_buf,"reset_cpu",msg_data->message->payloadlen) == 0)
+        {
+            SCB_AIRCR = SCB_RESET_VALUE;
+        }
+
+        else if (rt_strncmp(response_buf,"setdata",7) == 0)
+        {
+            set_plc_data(response_buf);
+        }
+
+//        else if (rt_strncmp(response_buf,"getdata",7) == 0)
+//        {
+//            get_plc_data(response_buf);
+//        }
+
+        else if (rt_strncmp(response_buf,"reset_env",msg_data->message->payloadlen) == 0)
+        {
+            ef_env_set_default();
+        }
+    }
+    else
+    {
+        LOG_D("message payloadlen is too long");
     }
 
 }
@@ -109,11 +134,30 @@ static void mqtt_connect_callback(MQTTClient *c)
 static void mqtt_online_callback(MQTTClient *c)
 {
     LOG_D("Enter mqtt_online_callback!");
+    char *s_onenet_devid,*s_onenet_auth_info;
+
+    s_onenet_devid = ef_get_env("dev_id");
+    if (s_onenet_devid == RT_NULL)
+        s_onenet_devid = "no_devid";
+    LOG_D("The dev_id is : %s \n",s_onenet_devid);
+
+    s_onenet_auth_info = ef_get_env("auth_info");
+    if (s_onenet_auth_info == RT_NULL)
+        s_onenet_auth_info = "no_auth_info";
+    LOG_D("The auth_info is : %s \n",s_onenet_auth_info);
+
+    rt_thread_mdelay(10);
+    onenet_flag = ONENET_ON;
+    updata_flag = UPDATA_ON;
+    rt_pin_write(MQTT_LED, PIN_HIGH);
 }
 
 static void mqtt_offline_callback(MQTTClient *c)
 {
     LOG_D("Enter mqtt_offline_callback!");
+    onenet_flag = ONENET_OFF;
+    updata_flag = UPDATA_OFF;
+    rt_pin_write(MQTT_LED, PIN_LOW);
 }
 
 static rt_err_t onenet_mqtt_entry(void)
@@ -257,7 +301,7 @@ __exit:
  * @return  0 : publish success
  *         -1 : publish fail
  */
-rt_err_t onenet_mqtt_publish(const char *topic, const uint8_t *msg, size_t len)
+rt_err_t onenet_mqtt_publish(const char *topic, const rt_uint8_t *msg, size_t len)
 {
     MQTTMessage message;
 
@@ -357,7 +401,7 @@ rt_err_t onenet_mqtt_upload_digit(const char *ds_name, const double digit)
         goto __exit;
     }
 
-    result = onenet_mqtt_publish(ONENET_TOPIC_DP, (uint8_t *)send_buffer, length);
+    result = onenet_mqtt_publish(ONENET_TOPIC_DP, (rt_uint8_t *)send_buffer, length);
     if (result < 0)
     {
         LOG_E("onenet publish failed (%d)!", result);
@@ -455,7 +499,7 @@ rt_err_t onenet_mqtt_upload_string(const char *ds_name, const char *str)
         goto __exit;
     }
 
-    result = onenet_mqtt_publish(ONENET_TOPIC_DP, (uint8_t *)send_buffer, length);
+    result = onenet_mqtt_publish(ONENET_TOPIC_DP, (rt_uint8_t *)send_buffer, length);
     if (result < 0)
     {
         LOG_E("onenet mqtt publish digit data failed!");
@@ -479,14 +523,14 @@ __exit:
  * @return  0 : set success
  *         -1 : function is null
  */
-void onenet_set_cmd_rsp_cb(void (*cmd_rsp_cb)(uint8_t *recv_data, size_t recv_size, uint8_t **resp_data, size_t *resp_size))
+void onenet_set_cmd_rsp_cb(void (*cmd_rsp_cb)(rt_uint8_t *recv_data, size_t recv_size, rt_uint8_t **resp_data, size_t *resp_size))
 {
 
     onenet_mqtt.cmd_rsp_cb = cmd_rsp_cb;
 
 }
 
-static rt_err_t onenet_mqtt_get_bin_data(const char *str, const uint8_t *bin, int binlen, uint8_t **out_buff, size_t *length)
+static rt_err_t onenet_mqtt_get_bin_data(const char *str, const rt_uint8_t *bin, int binlen, rt_uint8_t **out_buff, size_t *length)
 {
     rt_err_t result = RT_EOK;
     cJSON *root = RT_NULL;
@@ -516,7 +560,7 @@ static rt_err_t onenet_mqtt_get_bin_data(const char *str, const uint8_t *bin, in
     }
 
     /* size = header(3) + json + binary length(4) + binary length +'\0' */
-    *out_buff = (uint8_t *) ONENET_MALLOC(strlen(msg_str) + 3 + 4 + binlen + 1);
+    *out_buff = (rt_uint8_t *) ONENET_MALLOC(strlen(msg_str) + 3 + 4 + binlen + 1);
 
     strncpy((char *)&(*out_buff)[3], msg_str, strlen(msg_str));
     *length = strlen((const char *)&(*out_buff)[3]);
@@ -559,11 +603,11 @@ __exit:
  * @return  0 : upload success
  *         -1 : invalid argument or open file fail
  */
-rt_err_t onenet_mqtt_upload_bin(const char *ds_name, uint8_t *bin, size_t len)
+rt_err_t onenet_mqtt_upload_bin(const char *ds_name, rt_uint8_t *bin, size_t len)
 {
     size_t length = 0;
     rt_err_t result = RT_EOK;
-    uint8_t *send_buffer = RT_NULL;
+    rt_uint8_t *send_buffer = RT_NULL;
 
     RT_ASSERT(ds_name);
     RT_ASSERT(bin);
@@ -609,8 +653,8 @@ rt_err_t onenet_mqtt_upload_bin_by_path(const char *ds_name, const char *bin_pat
     size_t bin_len = 0;
     struct stat file_stat;
     rt_err_t result = RT_EOK;
-    uint8_t *send_buffer = RT_NULL;
-    uint8_t * bin_array = RT_NULL;
+    rt_uint8_t *send_buffer = RT_NULL;
+    rt_uint8_t * bin_array = RT_NULL;
 
     RT_ASSERT(ds_name);
     RT_ASSERT(bin_path);
@@ -634,7 +678,7 @@ rt_err_t onenet_mqtt_upload_bin_by_path(const char *ds_name, const char *bin_pat
     fd = open(bin_path, O_RDONLY);
     if (fd >= 0)
     {
-        bin_array = (uint8_t *) ONENET_MALLOC(bin_len);
+        bin_array = (rt_uint8_t *) ONENET_MALLOC(bin_len);
 
         bin_size = read(fd, bin_array, file_stat.st_size);
         close(fd);
@@ -683,6 +727,6 @@ __exit:
 #ifdef FINSH_USING_MSH
 #include <finsh.h>
 
-MSH_CMD_EXPORT(onenet_mqtt_init, OneNET cloud mqtt initializate);
+// MSH_CMD_EXPORT(onenet_mqtt_init, OneNET cloud mqtt initializate);
 
 #endif

@@ -20,6 +20,7 @@
  * Date           Author       Notes
  * 2018-04-24     chenyong     first version
  */
+#if 0
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -140,3 +141,4 @@ int onenet_set_cmd_rsp(int argc, char **argv)
 MSH_CMD_EXPORT(onenet_set_cmd_rsp, set cmd response function);
 
 #endif /* FINSH_USING_MSH */
+#endif

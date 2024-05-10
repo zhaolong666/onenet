@@ -469,7 +469,7 @@ __exit:
 }
 #endif /* ONENET_USING_AUTO_REGISTER */
 
-static cJSON *response_get_datapoints_handlers(const uint8_t *rec_buf)
+static cJSON *response_get_datapoints_handlers(const rt_uint8_t *rec_buf)
 {
     cJSON *root = RT_NULL;
     cJSON *root_data = RT_NULL;
@@ -632,7 +632,7 @@ cJSON *onenet_get_dp_by_limit(char *ds_name, size_t limit)
  *
  * @note    returned cJSON need to be free when user finished using the data.
  */
-cJSON *onenet_get_dp_by_start_end(char *ds_name, uint32_t start, uint32_t end, size_t limit)
+cJSON *onenet_get_dp_by_start_end(char *ds_name, rt_uint32_t start, rt_uint32_t end, size_t limit)
 {
     char start_buf[ONENET_TIME_BUF_LEN] = { 0 }, end_buf[ONENET_TIME_BUF_LEN] = { 0 };
     struct tm *cur_tm;
@@ -669,7 +669,7 @@ cJSON *onenet_get_dp_by_start_end(char *ds_name, uint32_t start, uint32_t end, s
  *
  * @note    returned cJSON need to be free when user finished using the data.
  */
-cJSON *onenet_get_dp_by_start_duration(char *ds_name, uint32_t start, size_t duration, size_t limit)
+cJSON *onenet_get_dp_by_start_duration(char *ds_name, rt_uint32_t start, size_t duration, size_t limit)
 {
     struct tm *cur_tm;
     char start_buf[ONENET_TIME_BUF_LEN] = { 0 };

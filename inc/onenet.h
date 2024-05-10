@@ -91,7 +91,7 @@ typedef struct rt_onenet_ds_info *rt_onenet_ds_info_t;
 int onenet_mqtt_init(void);
 
 /* Publish MQTT data to subscribe topic. */
-rt_err_t onenet_mqtt_publish(const char *topic, const uint8_t *msg, size_t len);
+rt_err_t onenet_mqtt_publish(const char *topic, const rt_uint8_t *msg, size_t len);
 
 #ifdef RT_USING_DFS
 /* Publish MQTT binary data to onenet by path. */
@@ -99,7 +99,7 @@ rt_err_t onenet_mqtt_upload_bin_by_path(const char *ds_name, const char *bin_pat
 #endif
 
 /* Publish MQTT binary data to onenet. */
-rt_err_t onenet_mqtt_upload_bin(const char *ds_name, uint8_t *bin, size_t len);
+rt_err_t onenet_mqtt_upload_bin(const char *ds_name, rt_uint8_t *bin, size_t len);
 
 /* Publish MQTT string data to onenet. */
 rt_err_t onenet_mqtt_upload_string(const char *ds_name, const char *str);
@@ -119,10 +119,10 @@ rt_err_t onenet_http_register_device(const char *dev_name, const char *auth_info
 rt_err_t onenet_http_get_datastream(const char *ds_name, struct rt_onenet_ds_info *datastream);
 /* get datapoints from OneNET cloud. Returned cJSON need to be free when user finished using the data. */
 cJSON *onenet_get_dp_by_limit(char *ds_name, size_t limit);
-cJSON *onenet_get_dp_by_start_end(char *ds_name, uint32_t start, uint32_t end, size_t limit);
-cJSON *onenet_get_dp_by_start_duration(char *ds_name, uint32_t start, size_t duration, size_t limit);
+cJSON *onenet_get_dp_by_start_end(char *ds_name, rt_uint32_t start, rt_uint32_t end, size_t limit);
+cJSON *onenet_get_dp_by_start_duration(char *ds_name, rt_uint32_t start, size_t duration, size_t limit);
 /* Set the command response callback function. User needs to malloc memory for response data. */
-void onenet_set_cmd_rsp_cb(void(*cmd_rsp_cb)(uint8_t *recv_data, size_t recv_size, uint8_t **resp_data, size_t *resp_size));
+void onenet_set_cmd_rsp_cb(void(*cmd_rsp_cb)(rt_uint8_t *recv_data, size_t recv_size, rt_uint8_t **resp_data, size_t *resp_size));
 
 /* ========================== User port function ============================ */
 #ifdef ONENET_USING_AUTO_REGISTER
